@@ -1,71 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Satellite Loop</title>
+    <title>NOAA Link Hunter</title>
     <style>
-        body { 
-            background-color: black; 
-            margin: 0; 
-            height: 100vh; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            overflow: hidden;
-        }
-        img {
-            height: 100%;
-            width: 100%;
-            object-fit: contain; /* Keeps aspect ratio so map doesn't stretch */
-        }
-        /* Refresh bar at bottom to show it's working */
-        #status {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 0%;
-            height: 4px;
-            background: #00FF00;
-            opacity: 0.5;
-            transition: width 1s linear;
-        }
+        body { background: #1a1a1a; color: white; font-family: monospace; text-align: center; }
+        img { max-width: 80%; border: 3px solid #00FF00; margin-top: 20px; display: none; }
+        .log { margin: 10px; padding: 10px; background: #333; display: inline-block; text-align: left; }
+        .success { color: #00FF00; font-weight: bold; }
+        .fail { color: #FF4444; }
     </style>
 </head>
 <body>
-    <img id="satLoop" src="" alt="Loading Weather Data..." onerror="tryBackup()" />
-    <div id="status"></div>
+    <h2>NOAA Link Diagnostics</h2>
+    <div id="console" class="log">Initializing Search...<br></div>
+    <br>
+    <img id="winnerImage" src="" />
 
     <script>
-        // PRIMARY: GOES-19 (The new East Coast Standard as of 2025)
-        const url_primary = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/GIFS/GOES19-CONUS-GeoColor.gif";
-        
-        // BACKUP: GOES-16 (Old standard, use if Primary is black)
-        const url_backup = "https://cdn.star.nesdis.noaa.gov/GOES16/ABI/GIFS/GOES16-CONUS-GeoColor.gif";
+        const consoleDiv = document.getElementById("console");
+        const imgDisplay = document.getElementById("winnerImage");
 
-        const img = document.getElementById("satLoop");
-        const bar = document.getElementById("status");
-        
-        function updateImage() {
-            // We add a random number (?v=...) to the end of the URL.
-            // This forces the TV to re-download the new image instead of showing the old cached one.
-            const timestamp = new Date().getTime();
-            img.src = url_primary + "?v=" + timestamp;
+        // LIST OF POTENTIAL URLS (New GOES-19 vs Old GOES-16)
+        const candidates = [
+            // 1. New GOES-19 Animated GIF (Most likely for 2025)
+            "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/GIFS/GOES19-CONUS-GeoColor.gif",
             
-            // Reset loading bar
-            bar.style.width = "0%";
-            setTimeout(() => { bar.style.width = "100%"; }, 100);
+            // 2. New GOES-19 Static JPG (Backup)
+            "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/CONUS/GEOCOLOR/latest.jpg",
+
+            // 3. Old GOES-16 Animated GIF (If they rolled back)
+            "https://cdn.star.nesdis.noaa.gov/GOES16/ABI/GIFS/GOES16-CONUS-GeoColor.gif",
+
+            // 4. Old GOES-16 Static JPG
+            "https://cdn.star.nesdis.noaa.gov/GOES16/ABI/CONUS/GEOCOLOR/latest.jpg"
+        ];
+
+        function log(msg, type) {
+            const span = document.createElement("div");
+            span.innerHTML = msg;
+            span.className = type;
+            consoleDiv.appendChild(span);
         }
 
-        function tryBackup() {
-            console.log("Primary failed, trying backup satellite...");
-            const timestamp = new Date().getTime();
-            img.src = url_backup + "?v=" + timestamp;
+        function testLink(url) {
+            log("Testing: " + url.split('/').pop(), "normal");
+            
+            const tester = new Image();
+            tester.onload = function() {
+                if(imgDisplay.style.display === "block") return; // Already found a winner
+                
+                log("✅ SUCCESS! Found valid source.", "success");
+                log("<b>WORKING URL:</b> " + url, "success");
+                
+                imgDisplay.src = url;
+                imgDisplay.style.display = "block";
+            };
+            
+            tester.onerror = function() {
+                log("❌ FAILED: " + url.split('/').pop(), "fail");
+            };
+            
+            // Add timestamp to prevent caching
+            tester.src = url + "?t=" + new Date().getTime();
         }
 
-        // Run immediately
-        updateImage();
-
-        // Refresh the loop every 10 minutes (600,000 ms)
-        setInterval(updateImage, 600000);
+        // Run tests
+        candidates.forEach(url => testLink(url));
     </script>
 </body>
 </html>
