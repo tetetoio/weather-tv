@@ -3,26 +3,31 @@
 <head>
     <title>Weather Loop</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
         img { width: 100%; height: 100%; object-fit: contain; }
-        #loading { position: absolute; color: white; font-family: sans-serif; bottom: 20px; right: 20px; }
+        #debug { position: absolute; bottom: 20px; left: 20px; font-size: 12px; background: rgba(0,0,0,0.7); padding: 10px; z-index: 100; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; }
     </style>
 </head>
 <body>
-    <img id="satImage" src="" alt="Satellite View" />
-    <div id="loading">Updating...</div>
+    <img id="satImage" src="" alt="" onerror="this.style.display='none'; document.getElementById('debug').innerHTML += '<br>FAILED: ' + this.src" onload="this.style.display='block'" />
+    <div id="loading">Loading Satellite Data...</div>
+    <div id="debug">Initializing...</div>
 
     <script>
-        // CONFIGURATION
-        const SATELLITE = "GOES19"; // Try GOES19 if this is black (East Coast) or GOES18 (West Coast)
-        const SECTOR = "CONUS";     // "CONUS" (USA) or "FD" (Full Disk)
-        const BAND = "GeoColor";    // "GeoColor", "Band13" (IR), etc.
-        const RES = "2500x1500";     // Resolution: "2500x1500" (4K) or "1250x750" (HD)
-        
-        // LOGIC
+        // --- CONFIGURATION ---
+        // As of late 2025, GOES19 is East. Directory is usually ALL CAPS "GEOCOLOR".
+        const SATELLITE = "GOES19"; 
+        const DIRECTORY_BAND = "GEOCOLOR"; // MUST BE CAPS
+        const FILE_BAND = "GeoColor";      // Usually Mixed Case
+        const SECTOR = "CONUS";
+        const RES = "2500x1500";           // Changed to Standard HD (1250x750 sometimes fails)
+
+        // --- LOGIC ---
         let images = [];
         let currentIndex = 0;
         const imgElement = document.getElementById("satImage");
+        const debugElement = document.getElementById("debug");
         const loadingElement = document.getElementById("loading");
 
         function getDayOfYear(date) {
@@ -33,39 +38,47 @@
         }
 
         function generateUrl(date) {
-            // NOAA Format: YYYYDDDHHMM_GOES16-ABI-CONUS-GeoColor-1250x750.jpg
             const year = date.getUTCFullYear();
             const day = getDayOfYear(date).toString().padStart(3, '0');
             const hour = date.getUTCHours().toString().padStart(2, '0');
             const min = date.getUTCMinutes().toString().padStart(2, '0');
             
-            return `https://cdn.star.nesdis.noaa.gov/${SATELLITE}/ABI/${SECTOR}/${BAND}/${year}${day}${hour}${min}_${SATELLITE}-ABI-${SECTOR}-${BAND}-${RES}.jpg`;
+            // PATTERN: https://cdn.star.nesdis.noaa.gov/GOES19/ABI/CONUS/GEOCOLOR/20253451810_GOES19-ABI-CONUS-GeoColor-2500x1500.jpg
+            return `https://cdn.star.nesdis.noaa.gov/${SATELLITE}/ABI/${SECTOR}/${DIRECTORY_BAND}/${year}${day}${hour}${min}_${SATELLITE}-ABI-${SECTOR}-${FILE_BAND}-${RES}.jpg`;
         }
 
         function loadLoop() {
             const now = new Date();
-            // Round down to nearest 5 minutes (NOAA update frequency)
-            let startCoeff = 1000 * 60 * 5;
+            // Round down to nearest 10 minutes to be safe (NOAA is sometimes slow to upload)
+            let startCoeff = 1000 * 60 * 10;
             let roundedNow = new Date(Math.floor(now.getTime() / startCoeff) * startCoeff);
+            
+            // Adjust for NOAA latency (Start 20 mins ago)
+            roundedNow.setMinutes(roundedNow.getMinutes() - 20);
 
-            // Generate last 24 frames (2 hours)
+            debugElement.innerHTML = "System Time: " + now.toTimeString().split(' ')[0];
+
             let urls = [];
-            for (let i = 24; i >= 0; i--) {
-                let d = new Date(roundedNow.getTime() - (i * 5 * 60000));
+            for (let i = 12; i >= 0; i--) { // Last 12 frames (2 hours)
+                let d = new Date(roundedNow.getTime() - (i * 10 * 60000));
                 urls.push(generateUrl(d));
             }
             
-            // Preload images
+            // Display the first URL so you can type it into your phone to check
+            debugElement.innerHTML += "<br>Trying: " + urls[0];
+
             let loadedCount = 0;
-            images = []; // Clear old list
+            images = [];
             
             urls.forEach(url => {
                 const img = new Image();
                 img.onload = () => {
                     loadedCount++;
-                    if(loadedCount > 10) loadingElement.style.display = 'none'; // Hide text once we have data
+                    if(loadedCount > 2) {
+                        loadingElement.style.display = 'none';
+                        debugElement.style.display = 'none'; // Hide debug once working
+                    }
                 };
-                img.onerror = () => { /* Skip missing frames */ };
                 img.src = url;
                 images.push(img);
             });
@@ -74,22 +87,20 @@
         // Animation Loop
         setInterval(() => {
             if (images.length > 0) {
-                // Find next valid image in our list
-                let loopCount = 0;
-                while (loopCount < images.length) {
+                let attempts = 0;
+                while (attempts < images.length) {
                     currentIndex = (currentIndex + 1) % images.length;
                     if (images[currentIndex].complete && images[currentIndex].naturalHeight !== 0) {
                         imgElement.src = images[currentIndex].src;
                         break;
                     }
-                    loopCount++;
+                    attempts++;
                 }
             }
-        }, 200); // Speed: 200ms per frame
+        }, 250);
 
-        // Refresh data every 10 minutes
         loadLoop();
-        setInterval(loadLoop, 600000); 
+        setInterval(loadLoop, 600000); // Refresh every 10 mins
     </script>
 </body>
 </html>
