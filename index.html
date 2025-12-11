@@ -21,7 +21,7 @@
         const DIRECTORY_BAND = "GEOCOLOR"; // MUST BE CAPS
         const FILE_BAND = "GeoColor";      // Usually Mixed Case
         const SECTOR = "ne";
-        const RES = "2500x1500";           // Changed to Standard HD (1250x750 sometimes fails)
+        const RES = "2400x2400";           // Changed to Standard HD (1250x750 sometimes fails)
 
         // --- LOGIC ---
         let images = [];
@@ -44,7 +44,7 @@
             const min = date.getUTCMinutes().toString().padStart(2, '0');
             
             // PATTERN: https://cdn.star.nesdis.noaa.gov/GOES19/ABI/CONUS/GEOCOLOR/20253451810_GOES19-ABI-CONUS-GeoColor-2500x1500.jpg
-            return `https://cdn.star.nesdis.noaa.gov/${SATELLITE}/ABI/${SECTOR}/${DIRECTORY_BAND}/${year}${day}${hour}${min}_${SATELLITE}-ABI-${SECTOR}-${FILE_BAND}-${RES}.jpg`;
+            return `https://cdn.star.nesdis.noaa.gov/${SATELLITE}/ABI/SECTOR/${SECTOR}/${DIRECTORY_BAND}/${year}${day}${hour}${min}_${SATELLITE}-ABI-${SECTOR}-${FILE_BAND}-${RES}.jpg`;
         }
 
         function loadLoop() {
