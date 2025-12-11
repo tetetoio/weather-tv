@@ -1,106 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Weather Loop</title>
+    <title>Satellite Loop</title>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        img { width: 100%; height: 100%; object-fit: contain; }
-        #debug { position: absolute; bottom: 20px; left: 20px; font-size: 12px; background: rgba(0,0,0,0.7); padding: 10px; z-index: 100; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; }
+        body { 
+            background-color: black; 
+            margin: 0; 
+            height: 100vh; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            overflow: hidden;
+        }
+        img {
+            height: 100%;
+            width: 100%;
+            object-fit: contain; /* Keeps aspect ratio so map doesn't stretch */
+        }
+        /* Refresh bar at bottom to show it's working */
+        #status {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0%;
+            height: 4px;
+            background: #00FF00;
+            opacity: 0.5;
+            transition: width 1s linear;
+        }
     </style>
 </head>
 <body>
-    <img id="satImage" src="" alt="" onerror="this.style.display='none'; document.getElementById('debug').innerHTML += '<br>FAILED: ' + this.src" onload="this.style.display='block'" />
-    <div id="loading">Loading Satellite Data...</div>
-    <div id="debug">Initializing...</div>
+    <img id="satLoop" src="" alt="Loading Weather Data..." onerror="tryBackup()" />
+    <div id="status"></div>
 
     <script>
-        // --- CONFIGURATION ---
-        // As of late 2025, GOES19 is East. Directory is usually ALL CAPS "GEOCOLOR".
-        const SATELLITE = "GOES19"; 
-        const DIRECTORY_BAND = "GEOCOLOR"; // MUST BE CAPS
-        const FILE_BAND = "GeoColor";      // Usually Mixed Case
-        const SECTOR = "ne";
-        const RES = "2400x2400";           // Changed to Standard HD (1250x750 sometimes fails)
+        // PRIMARY: GOES-19 (The new East Coast Standard as of 2025)
+        const url_primary = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/GIFS/GOES19-CONUS-GeoColor.gif";
+        
+        // BACKUP: GOES-16 (Old standard, use if Primary is black)
+        const url_backup = "https://cdn.star.nesdis.noaa.gov/GOES16/ABI/GIFS/GOES16-CONUS-GeoColor.gif";
 
-        // --- LOGIC ---
-        let images = [];
-        let currentIndex = 0;
-        const imgElement = document.getElementById("satImage");
-        const debugElement = document.getElementById("debug");
-        const loadingElement = document.getElementById("loading");
-
-        function getDayOfYear(date) {
-            const start = new Date(date.getFullYear(), 0, 0);
-            const diff = date - start;
-            const oneDay = 1000 * 60 * 60 * 24;
-            return Math.floor(diff / oneDay);
+        const img = document.getElementById("satLoop");
+        const bar = document.getElementById("status");
+        
+        function updateImage() {
+            // We add a random number (?v=...) to the end of the URL.
+            // This forces the TV to re-download the new image instead of showing the old cached one.
+            const timestamp = new Date().getTime();
+            img.src = url_primary + "?v=" + timestamp;
+            
+            // Reset loading bar
+            bar.style.width = "0%";
+            setTimeout(() => { bar.style.width = "100%"; }, 100);
         }
 
-        function generateUrl(date) {
-            const year = date.getUTCFullYear();
-            const day = getDayOfYear(date).toString().padStart(3, '0');
-            const hour = date.getUTCHours().toString().padStart(2, '0');
-            const min = date.getUTCMinutes().toString().padStart(2, '0');
-            
-            // PATTERN: https://cdn.star.nesdis.noaa.gov/GOES19/ABI/CONUS/GEOCOLOR/20253451810_GOES19-ABI-CONUS-GeoColor-2500x1500.jpg
-            return `https://cdn.star.nesdis.noaa.gov/${SATELLITE}/ABI/SECTOR/${SECTOR}/${DIRECTORY_BAND}/${year}${day}${hour}${min}_${SATELLITE}-ABI-${SECTOR}-${FILE_BAND}-${RES}.jpg`;
+        function tryBackup() {
+            console.log("Primary failed, trying backup satellite...");
+            const timestamp = new Date().getTime();
+            img.src = url_backup + "?v=" + timestamp;
         }
 
-        function loadLoop() {
-            const now = new Date();
-            // Round down to nearest 10 minutes to be safe (NOAA is sometimes slow to upload)
-            let startCoeff = 1000 * 60 * 10;
-            let roundedNow = new Date(Math.floor(now.getTime() / startCoeff) * startCoeff);
-            
-            // Adjust for NOAA latency (Start 20 mins ago)
-            roundedNow.setMinutes(roundedNow.getMinutes() - 20);
+        // Run immediately
+        updateImage();
 
-            debugElement.innerHTML = "System Time: " + now.toTimeString().split(' ')[0];
-
-            let urls = [];
-            for (let i = 12; i >= 0; i--) { // Last 12 frames (2 hours)
-                let d = new Date(roundedNow.getTime() - (i * 10 * 60000));
-                urls.push(generateUrl(d));
-            }
-            
-            // Display the first URL so you can type it into your phone to check
-            debugElement.innerHTML += "<br>Trying: " + urls[0];
-
-            let loadedCount = 0;
-            images = [];
-            
-            urls.forEach(url => {
-                const img = new Image();
-                img.onload = () => {
-                    loadedCount++;
-                    if(loadedCount > 2) {
-                        loadingElement.style.display = 'none';
-                        debugElement.style.display = 'none'; // Hide debug once working
-                    }
-                };
-                img.src = url;
-                images.push(img);
-            });
-        }
-
-        // Animation Loop
-        setInterval(() => {
-            if (images.length > 0) {
-                let attempts = 0;
-                while (attempts < images.length) {
-                    currentIndex = (currentIndex + 1) % images.length;
-                    if (images[currentIndex].complete && images[currentIndex].naturalHeight !== 0) {
-                        imgElement.src = images[currentIndex].src;
-                        break;
-                    }
-                    attempts++;
-                }
-            }
-        }, 250);
-
-        loadLoop();
-        setInterval(loadLoop, 600000); // Refresh every 10 mins
+        // Refresh the loop every 10 minutes (600,000 ms)
+        setInterval(updateImage, 600000);
     </script>
 </body>
 </html>
